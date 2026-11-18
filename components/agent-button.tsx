@@ -1,6 +1,7 @@
 "use client"
 
 import { Bot } from "lucide-react"
+import { AGENT_TRIGGER_ID } from "@/components/chat/shop/focus"
 import { useSidebar } from "@/components/ui/sidebar"
 
 export function AgentButton() {
@@ -9,6 +10,7 @@ export function AgentButton() {
 
   return (
     <button
+      id={AGENT_TRIGGER_ID}
       type="button"
       onClick={toggleSidebar}
       aria-label="Toggle agent panel"

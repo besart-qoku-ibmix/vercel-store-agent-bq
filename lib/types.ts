@@ -1,6 +1,7 @@
 export type OrderStatus =
   | "pending"
   | "paid"
+  | "fulfilled"
   | "shipped"
   | "delivered"
   | "cancelled";
@@ -226,9 +227,9 @@ export interface Return {
   callback: string | null;
   items: { productId: string; quantity: number }[];
   reason: string;
-  status: "pending" | "approved" | "rejected" | "processed";
+  status: BackOfficeReturnStatus;
   scheduledFireAt: string;
-  decision: "approved" | "rejected" | null;
+  decision: BackOfficeReturnDecision | null;
   refundAmount: number | null;
   notes: string | null;
   createdAt: string;

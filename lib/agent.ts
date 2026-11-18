@@ -9,4 +9,22 @@
  * Workshop docs: https://agent-foundations-certification.vercel.app/docs/chat-agent
  */
 
-export {};
+import { WorkflowAgent } from "@ai-sdk/workflow";
+import { isStepCount } from "ai";
+import { companyModel } from "@/lib/model";
+import { SHOP_AGENT_INSTRUCTIONS } from "@/lib/prompts";
+import { shopTools } from "@/lib/tools";
+
+/** Hard cap on model/tool rounds per answer, so a loop can't run away. */
+const MAX_STEPS = 8;
+
+export function createShopAgent() {
+  return new WorkflowAgent({
+    // Our own OpenAI-compatible provider (see lib/model.ts), not AI Gateway.
+    model: companyModel("shop"),
+    instructions: SHOP_AGENT_INSTRUCTIONS,
+    tools: shopTools,
+    stopWhen: isStepCount(MAX_STEPS),
+    maxRetries: 3,
+  });
+}

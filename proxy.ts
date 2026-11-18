@@ -14,6 +14,13 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  if (pathname.startsWith("/api/admin")) {
+    return NextResponse.json(
+      { error: "unauthorized", message: "Admin sign-in required." },
+      { status: 401, headers: { "cache-control": "no-store" } },
+    );
+  }
+
   const url = request.nextUrl.clone();
   url.pathname = "/admin/login";
   url.search = "";
@@ -21,5 +28,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: ["/admin/:path*", "/api/admin/:path*"],
 };

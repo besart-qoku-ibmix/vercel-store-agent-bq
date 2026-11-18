@@ -9,8 +9,14 @@
  * Workshop docs: https://agent-foundations-certification.vercel.app/docs/admin-chat-agent
  */
 
-export const POST = async () =>
-  new Response(
+import { requireAdmin } from "@/lib/admin-guard";
+
+export const POST = async () => {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+
+  return new Response(
     "Not implemented yet — finish the chat-agent workshop step to enable this route.",
     { status: 501 },
   );
+};
