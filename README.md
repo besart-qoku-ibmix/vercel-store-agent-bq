@@ -31,16 +31,53 @@ The storefront only needs `BYPASS_SECRET` to run. The `STORE_BUSINESS_AGENT_*` v
 
 ## Environment variables
 
+All variables are server-only. Never give a secret a `NEXT_PUBLIC_` prefix (the only public one is `NEXT_PUBLIC_SITE_URL`, which is not a secret). `.env.local` is gitignored; `.env.example` is the committed template with names and descriptions only.
+
+### Store API
+
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `BYPASS_SECRET` | Yes | Vercel deployment-protection bypass secret. Sent as the `x-vercel-protection-bypass` header on every API call. Server-only — never give it a `NEXT_PUBLIC_` prefix. |
+| `BYPASS_SECRET` | Yes | Vercel deployment-protection bypass secret. Sent as the `x-vercel-protection-bypass` header on every store API call. |
 | `API_BASE_URL` | No | Override the backend API base URL. Defaults to `https://vercel-agentic-swag-store-api.vercel.app/api`. |
-| `STORE_BUSINESS_AGENT_URL` | Admin chat only | HTTP base URL of the deployed store-business-agent. |
-| `STORE_BUSINESS_AGENT_BASIC_USER` | Admin chat only | HTTP Basic auth user matching the agent's `ADMIN_AGENT_BASIC_USER`. |
-| `STORE_BUSINESS_AGENT_BASIC_PASSWORD` | Admin chat only | HTTP Basic auth password matching the agent's `ADMIN_AGENT_BASIC_PASSWORD`. |
-| `NEXT_PUBLIC_SITE_URL` | No | Public site URL used for metadata. Defaults to `http://localhost:3000`. |
 
-`.env.local` is gitignored; `.env.example` is the redacted template.
+### Model provider (custom, OpenAI-compatible)
+
+Both agents call a model through your own OpenAI-compatible endpoint, **not Vercel AI Gateway**. `AI_GATEWAY_API_KEY` and AI Gateway integrations are not used. `lib/model.ts` builds the model from these variables:
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `CUSTOM_AI_BASE_URL` | Yes | Base URL of the endpoint, usually the part before `/chat/completions` (often ending in `/v1`). |
+| `CUSTOM_AI_API_KEY` | Yes | API key for that endpoint, sent as the bearer token. |
+| `CUSTOM_AI_MODEL_LUNA` | No | Model id for the **shopping agent**. Defaults to `gpt-6-luna`. |
+| `CUSTOM_AI_MODEL_SOL` | No | Model id for the **admin agent**. Defaults to `gpt-6.1-sol`. |
+
+To use your own provider:
+
+1. Use an endpoint that supports the OpenAI **Chat Completions** API. The code calls `.chat(...)`, so an endpoint that only offers the Responses API will not work.
+2. Set `CUSTOM_AI_BASE_URL` and `CUSTOM_AI_API_KEY`. If either is missing, the model call fails with the fixed error "Model provider is not configured." (the error never contains the URL or key).
+3. Set both model ids to models your provider serves. The defaults may not exist on your provider. You can use the same model for both.
+4. Both models must support **tool calling**. The admin agent also writes shell scripts, so give it the stronger model if you have a choice.
+
+If the provider rejects a call, the server log shows `[model] call failed: ... status=<code>` (for example `401` for a bad key, `404` for an unknown model id).
+
+The model is wrapped in a small class in `lib/model.ts` on purpose. A model call inside a durable workflow is serialized into the workflow event log, and the stock provider model would write its `Authorization` header (your API key) there. The wrapper stores only a role name (`shop` or `admin`) and reads the env vars when the call runs. To switch to another SDK provider, change only `createChatModel` in that file.
+
+### Admin agent sandbox
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `VERCEL_OIDC_TOKEN` | Local only | Authenticates the Vercel Sandbox SDK. Run `vercel env pull` to get it. It expires after about 12 hours, so pull again if the admin agent starts failing locally. Vercel provides it automatically on deployments, so do not set it there. |
+| `ADMIN_SANDBOX_NAME` | No | Name of the persistent sandbox that holds the admin agent's data files and memory. Defaults to `ship-it-shop-admin`. |
+
+### Other
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SITE_URL` | No | Public site URL used for metadata. Defaults to `http://localhost:3000`. Set it to the deployed URL in production. |
+
+The admin password is not an environment variable. It is a demo constant in `lib/admin-auth.ts`.
+
+On Vercel, set the same variables for Preview and Production, except `VERCEL_OIDC_TOKEN`.
 
 ## Scripts
 
