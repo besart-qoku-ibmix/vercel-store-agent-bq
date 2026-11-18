@@ -34,6 +34,7 @@ import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import {
   hasResumableRun,
   lastTurnHasReturn,
+  openArchivedShopChat,
   openShopChat,
   retryShopChat,
   startNewShopChat,
@@ -48,6 +49,7 @@ import {
   SHOP_INPUT_ATTR,
 } from "@/components/chat/shop/focus";
 import { MessageParts } from "@/components/chat/shop/message-parts";
+import { PreviousChats } from "@/components/chat/shop/previous-chats";
 import type { ShopMessage } from "@/components/chat/shop/types";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";
@@ -73,6 +75,11 @@ export function AgentChat() {
     focusShopComposer();
   }, []);
 
+  const openChat = useCallback(async (chatId: string) => {
+    setSession(await openArchivedShopChat(chatId));
+    focusShopComposer();
+  }, []);
+
   if (!session) {
     return (
       <div
@@ -86,7 +93,7 @@ export function AgentChat() {
   }
 
   // key: a new chat is a new Chat instance, so useChat must rebind.
-  return <ChatBody key={session.chatId} session={session} onNewChat={newChat} />;
+  return <ChatBody key={session.chatId} session={session} onNewChat={newChat} onOpenChat={openChat} />;
 }
 
 /** Moves focus into the composer when the panel opens, and back to the robot button on close. */
@@ -114,9 +121,11 @@ function usePanelFocus() {
 function ChatBody({
   session,
   onNewChat,
+  onOpenChat,
 }: {
   session: ShopChatSession;
   onNewChat: () => void;
+  onOpenChat: (chatId: string) => void;
 }) {
   const { messages, status, error } = useChat<ShopMessage>({
     chat: session.chat,
@@ -274,6 +283,7 @@ function ChatBody({
                     New chat
                   </Button>
                 ) : null}
+                <PreviousChats onOpen={onOpenChat} />
               </PromptInputTools>
               <PromptInputSubmit
                 status={status}

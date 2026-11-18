@@ -35,17 +35,21 @@
  *    and reconnectToStream below drops any partial copy left on screen.
  * 5. Retry after a failure never re-POSTs a turn whose return was already
  *    filed (see retryShopChat), so a retry cannot file a second return.
+ * 6. "New chat" archives the conversation (see client-storage.ts) instead of
+ *    deleting it; openArchivedShopChat() brings one back as the current chat.
  */
 import { Chat } from "@ai-sdk/react";
 import { WorkflowChatTransport } from "@ai-sdk/workflow/client";
 import { type ChatTransport, isToolUIPart, type UIMessage } from "ai";
 import {
+  archiveShopChat,
   clearActiveRun,
   clearShopChat,
   getResumableRunId,
   isValidRunId,
   loadOrCreateShopChat,
   readActiveRunId,
+  restoreArchivedChat,
   saveMessages,
   saveTurnStarted,
 } from "@/lib/shop/client-storage";
@@ -86,15 +90,28 @@ export function openShopChat(): ShopChatSession {
   return current;
 }
 
-/** "New chat": stops the current response, wipes storage, starts fresh. */
-export async function startNewShopChat(): Promise<ShopChatSession> {
+/** Stops the current response and moves the conversation to "Previous chats". */
+async function leaveCurrentChat(): Promise<void> {
   const previous = current;
   current = null;
   if (previous) {
     previous.userStopped = true;
     await previous.chat.stop().catch(() => {});
+    archiveShopChat(previous.chatId, sanitizeMessages(previous.chat.messages));
   }
   clearShopChat();
+}
+
+/** "New chat": keeps the current conversation in the archive and starts fresh. */
+export async function startNewShopChat(): Promise<ShopChatSession> {
+  await leaveCurrentChat();
+  return openShopChat();
+}
+
+/** Reopens a chat from "Previous chats" (the current one is archived first). */
+export async function openArchivedShopChat(chatId: string): Promise<ShopChatSession> {
+  await leaveCurrentChat();
+  restoreArchivedChat(chatId);
   return openShopChat();
 }
 

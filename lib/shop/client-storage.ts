@@ -11,6 +11,8 @@
  *                   from the `x-workflow-run-id` response header. It is what
  *                   lets a refreshed page reconnect to the SAME run instead of
  *                   POSTing the message again.
+ * - previous chats  "New chat" moves the conversation into a small archive in
+ *                   localStorage (see the bottom of this file).
  *
  * Nothing secret is stored here: only chat messages the shopper already sees,
  * and an opaque run id. Every access is wrapped in try/catch because storage
@@ -198,4 +200,124 @@ export function clearShopChat(): void {
   } catch {
     // ignore
   }
+}
+
+// ---------------------------------------------------------------------------
+// Previous chats. "New chat" archives the conversation instead of dropping it.
+// The archive is in localStorage so it survives closing the tab; the chat in
+// progress stays in sessionStorage. Archived chats are finished history: they
+// carry no run id, so reopening one never reconnects to or restarts a run.
+// ---------------------------------------------------------------------------
+
+const ARCHIVE_KEY = "ship-it-shop:shop-chat-archive:v1";
+const MAX_ARCHIVED_CHATS = 10;
+const MAX_TITLE_LENGTH = 60;
+
+interface ArchivedShopChat {
+  chatId: string;
+  title: string;
+  updatedAt: number;
+  messages: UIMessage[];
+}
+
+export interface ArchivedChatSummary {
+  chatId: string;
+  title: string;
+  updatedAt: number;
+}
+
+function readArchive(): ArchivedShopChat[] {
+  try {
+    const raw = window.localStorage.getItem(ARCHIVE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item): ArchivedShopChat[] => {
+      const c = item as Partial<ArchivedShopChat> | null;
+      if (
+        !c ||
+        typeof c.chatId !== "string" ||
+        typeof c.title !== "string" ||
+        typeof c.updatedAt !== "number" ||
+        !Array.isArray(c.messages)
+      ) {
+        return [];
+      }
+      return [
+        {
+          chatId: c.chatId,
+          title: c.title,
+          updatedAt: c.updatedAt,
+          messages: c.messages.filter(isStoredMessage),
+        },
+      ];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function writeArchive(list: ArchivedShopChat[]): void {
+  try {
+    window.localStorage.setItem(ARCHIVE_KEY, JSON.stringify(list));
+  } catch {
+    try {
+      // Quota problem: keep only the newest few.
+      window.localStorage.setItem(ARCHIVE_KEY, JSON.stringify(list.slice(0, 3)));
+    } catch {
+      // Storage unavailable: previous chats just won't be kept.
+    }
+  }
+}
+
+/** Saves a finished or abandoned conversation to the archive (newest first). */
+export function archiveShopChat(chatId: string, messages: UIMessage[]): void {
+  const firstUser = messages.find((m) => m.role === "user");
+  if (!firstUser) return;
+  const title =
+    firstUser.parts
+      .map((p) => (p.type === "text" ? p.text : ""))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, MAX_TITLE_LENGTH) || "Chat";
+  const entry: ArchivedShopChat = {
+    chatId,
+    title,
+    updatedAt: Date.now(),
+    messages: messages.slice(-MAX_STORED_MESSAGES),
+  };
+  writeArchive(
+    [entry, ...readArchive().filter((c) => c.chatId !== chatId)].slice(
+      0,
+      MAX_ARCHIVED_CHATS,
+    ),
+  );
+}
+
+export function listArchivedChats(): ArchivedChatSummary[] {
+  return readArchive().map(({ chatId, title, updatedAt }) => ({
+    chatId,
+    title,
+    updatedAt,
+  }));
+}
+
+/**
+ * Moves an archived chat back into the current-chat slot. Returns false when
+ * it no longer exists. The caller opens it with `openShopChat()` afterwards.
+ */
+export function restoreArchivedChat(chatId: string): boolean {
+  const list = readArchive();
+  const found = list.find((c) => c.chatId === chatId);
+  if (!found) return false;
+  writeArchive(list.filter((c) => c.chatId !== chatId));
+  writeRaw({
+    version: 1,
+    chatId: found.chatId,
+    messages: found.messages,
+    activeRunId: null,
+    activeRunStartedAt: null,
+    updatedAt: Date.now(),
+  });
+  return true;
 }
