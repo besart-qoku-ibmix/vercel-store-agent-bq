@@ -70,6 +70,23 @@ export async function preauthorizeRefundStep(orderId: string) {
 }
 
 /**
+ * The workflow library builds the webhook URL from VERCEL_URL, the
+ * per-deployment host, and Vercel Authentication answers 401 on that host, so
+ * the store's callback never arrives. In production, swap in the public
+ * production domain, which is not protected. Previews and local runs keep the
+ * library's URL, because the production domain would serve production, not
+ * that preview.
+ */
+function publicCallbackUrl(callback: string): string {
+  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (process.env.VERCEL_ENV !== "production" || !host) return callback;
+  const url = new URL(callback);
+  url.protocol = "https:";
+  url.host = host;
+  return url.toString();
+}
+
+/**
  * Step 4: file the return with the store. `callback` is the workflow webhook
  * the store calls when it has decided.
  *
@@ -85,7 +102,7 @@ export async function fileReturnStep(input: {
 }) {
   "use step";
   try {
-    const ret = await createReturn(input);
+    const ret = await createReturn({ ...input, callback: publicCallbackUrl(input.callback) });
     return { id: ret.id, status: ret.status };
   } catch (err) {
     return failStep(err, "Filing the return");
